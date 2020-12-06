@@ -12,6 +12,7 @@ library(tidyverse)
 library(MASS)             # for stepAIC()
 library(modelr)
 library(purrr)
+library(patchwork)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -135,7 +136,7 @@ Propose a regression model for birthweight.
 
 * We can use step-wise selection procedure to select our regression model. 
 * The step-wise selection procedure iteratively adds and/or removes important predictor based on AIC score. 
-* Based on the results from step-wise selection, my proposed model is: `bwt` = `\beta_0` + `\beta_1` `babysex2` + `\beta_2` `bhead` + `\beta_3` `blength` + `\beta_4` `delwt` + `\beta_5` `fincome` + `\beta_6` `gaweeks` + `\beta_7` `mheight` + `\beta_8` `mrace2` + `\beta_9` `mrace3` + `\beta_10` `mrace4`  + `\beta_11` `parity` + `\beta_12` `ppwt` + `\beta_13` `smoken`
+* Based on the results from step-wise selection, my proposed model is: `bwt` = `β_0` + `β_1` `babysex2` + `β_2` `bhead` + `β_3` `blength` + `β_4` `delwt` + `β_5` `fincome` + `β_6` `gaweeks` + `β_7` `mheight` + `β_8` `mrace2` + `β_9` `mrace3` + `β_10` `mrace4`  + `β_11` `parity` + `β_12` `ppwt` + `β_13` `smoken`
 
 ```{r stepwise_reg,collapse=TRUE}
 # fit the full model 
@@ -225,4 +226,114 @@ cv_df %>%
     title = "Violin plot",
     subtitle = "fit: step-wise model; int: interaction model; main: main effect model")
 ```
+
+
+
+## Problem 3
+
+Download data. 
+
+```{r weather_df,collapse=TRUE}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  dplyr::select(name, id, everything())
+```
+
+Regression of interest: 
+
+* tmax = β_0 + β_1 tmin
+
+Goal: 
+
+* To use 5000 bootstrap samples to learn about the distribution of r^2 and log(hat β_0 ∗ hat β_1) 
+
+
+For each bootstrap sample, produce estimates of these two quantities. 
+
+```{r btsrp_rslt_est,collapse=TRUE}
+# create 5000 bootstrap samples
+set.seed(20201209)
+bootstrap_rslt = 
+  weather_df %>% 
+  bootstrap(5000, id = "strap_number") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(tmax ~ tmin, data = .x)), 
+    r_squared = map(models, broom::glance),
+    results = map(models, broom::tidy)
+  )
+
+# produce estimates of r^2 + log(\hat(\beta_0) * \hat(\beta_1))
+bootstrap_est = 
+  bootstrap_rslt %>% 
+  dplyr::select(strap_number, r_squared, results) %>% 
+  unnest(r_squared) %>% 
+  dplyr::select(strap_number, r.squared, results) %>% 
+  unnest(results) %>% 
+  janitor::clean_names() %>%  
+  dplyr::select(strap_number, r_squared, term, estimate) %>% 
+  pivot_wider(
+    names_from = term, 
+    values_from = estimate
+  ) %>% 
+  rename(beta_0 = `(Intercept)`, beta_1 = tmin) %>% 
+  mutate(log_beta0beta1 = log(beta_0 * beta_1)) %>% 
+  dplyr::select(-starts_with("beta_"))
+
+head(bootstrap_est)
+```
+
+Plot the distribution of these estimates. 
+
+* r^2 has a bell-shaped distribution, with mean at `r round(mean(bootstrap_est$r_squared), 3)`. It ranges from `r round(min(bootstrap_est$r_squared), 3)` to `r round(max(bootstrap_est$r_squared), 3)` 
+* log(hat β_0 ∗ hat β_1) also has a bell-shaped distribution, with mean at `r round(mean(bootstrap_est$log_beta0beta1), 3)`. It ranges from `r round(min(bootstrap_est$log_beta0beta1), 3)` to `r round(max(bootstrap_est$log_beta0beta1), 3)`.  
+
+```{r distn_plt,collapse=TRUE}
+# plot distribution of r^2
+r2_distn = 
+  bootstrap_est %>% 
+  ggplot(aes(x = r_squared)) + 
+  geom_density() + 
+  labs(
+    title = "Distribution of r^2",
+    subtitle = "Based on 5000 bootstrap samples", 
+    x = "R squared")
+
+# plot distribution of log(\hat(\beta_0) * \hat(\beta_1))
+log_distn = 
+  bootstrap_est %>% 
+  ggplot(aes(x = log_beta0beta1)) + 
+  geom_density() + 
+  labs(
+    title = "Distribution of log(hat β_0 ∗ hat β_1)",
+    subtitle = "Based on 5000 bootstrap samples", 
+    x = "log(hat β_0 ∗ hat β_1)")
+
+r2_distn + log_distn
+```
+
+Using these 5000 estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2 and log(hat β_0 ∗ hat β_1). 
+
+* The 95% confidence interval for r^2 is (0.894, 0.927).
+* The 95% confidence interval for log(hat β_0 ∗ hat β_1) is (1.965, 2.059).
+ 
+```{r 95ci,collapse=TRUE}
+# construct bootstrap CI
+bootstrap_est %>% 
+  dplyr::summarize(
+    r2_ci_lower = quantile(r_squared, 0.025),
+    r2_ci_upper = quantile(r_squared, 0.975), 
+    log_ci_lower = quantile(log_beta0beta1, 0.025),
+    log_ci_upper = quantile(log_beta0beta1, 0.975)
+  ) %>% 
+  knitr::kable(digits = 3) 
+```
+
 
