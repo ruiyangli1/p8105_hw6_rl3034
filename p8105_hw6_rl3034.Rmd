@@ -9,8 +9,8 @@ This is my solution to HW6.
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+library(MASS)             # for stepAIC()
 library(modelr)
-library(p8105.datasets)
 
 
 knitr::opts_chunk$set(
@@ -35,7 +35,7 @@ theme_set(theme_minimal() + theme(legend.position = "bottom"))
 
 ### Problem 1
 
-```{r homicide_df}
+```{r homicide_df,collapse=TRUE}
 homicide_df = 
   read_csv("data/homicide-data.csv", na = c("", "NA", "Unknown")) %>% 
   mutate(
@@ -49,13 +49,13 @@ homicide_df =
   filter(
     victim_race %in% c("White", "Black"),
     city_state != "Tulsa, AL") %>% 
-  select(city_state, resolution, victim_age, victim_race, victim_sex)
+  dplyr::select(city_state, resolution, victim_age, victim_race, victim_sex)
 ```
 
 
 Start with one city: Baltimore, MD.
 
-```{r baltimore_rlts}
+```{r baltimore_rlts,collapse=TRUE}
 baltimore_df =
   homicide_df %>% 
   filter(city_state == "Baltimore, MD")
@@ -69,14 +69,14 @@ glm(resolution ~ victim_age + victim_race + victim_sex,
     CI_lower = exp(estimate - 1.96 * std.error),
     CI_upper = exp(estimate + 1.96 * std.error)
   ) %>% 
-  select(term, OR, starts_with("CI")) %>% 
+  dplyr::select(term, OR, starts_with("CI")) %>% 
   knitr::kable(digits = 3)
 ```
 
 
 Try this across cities.
 
-```{r all_cities_rslts}
+```{r all_cities_rslts,collapse=TRUE}
 models_results_df = 
   homicide_df %>% 
   nest(data = -city_state) %>% 
@@ -85,20 +85,20 @@ models_results_df =
       map(.x = data, ~glm(resolution ~ victim_age + victim_race + victim_sex, data = .x, family = binomial())),
     results = map(models, broom::tidy)
   ) %>% 
-  select(city_state, results) %>% 
+  dplyr::select(city_state, results) %>% 
   unnest(results) %>% 
   mutate(
     OR = exp(estimate),
     CI_lower = exp(estimate - 1.96 * std.error),
     CI_upper = exp(estimate + 1.96 * std.error)
   ) %>% 
-  select(city_state, term, OR, starts_with("CI")) 
+  dplyr::select(city_state, term, OR, starts_with("CI")) 
 ```
 
 
 Create a plot that shows the estimated ORs and CIs for each city. 
 
-```{r or_plt}
+```{r or_plt,collapse=TRUE}
 models_results_df %>% 
   filter(term == "victim_sexMale") %>% 
   mutate(city_state = fct_reorder(city_state, OR)) %>% 
@@ -109,3 +109,101 @@ models_results_df %>%
 ```
 
 
+## Problem 2
+
+Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
+
+* There is no missing data observed. 
+
+```{r baby_df,collapse=TRUE}
+# Inspect the data
+#read_csv("./data/birthweight.csv") %>% sample_n(3) 
+
+baby_df = 
+  read_csv("./data/birthweight.csv") %>% 
+  mutate(
+    babysex = factor(babysex), 
+    frace = factor(frace), 
+    malform = factor(malform), 
+    mrace = factor(mrace)
+    )
+
+# counting missing values
+# total na count
+baby_df %>%
+  summarise(na_count = sum(is.na(.)))
+# variable-wise na%
+baby_df %>%
+  summarise_all(list(~sum(is.na(.))))/nrow(baby_df)
+
+# check to dummy variables
+
+#contrasts(baby_df$babysex)
+#levels(baby_df$babysex)
+
+#contrasts(baby_df$frace)
+#levels(baby_df$frace)
+
+#contrasts(baby_df$malform)
+#levels(baby_df$malform)
+
+#contrasts(baby_df$mrace)
+#levels(baby_df$mrace)
+```
+
+Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
+
+* We can use step-wise selection procedure to select our regression model. 
+* The model that I propose for birthweight is: `bwt` = `\beta_0` + `\beta_1` `babysex2` + `\beta_2` `bhead` + `\beta_3` `blength` + `\beta_4` `delwt` + `\beta_5` `fincome` + `\beta_6` `gaweeks` + `\beta_7` `mheight` + `\beta_8` `mrace2` + `\beta_9` `mrace3` + `\beta_10` `mrace4`  + `\beta_11` `parity` + `\beta_12` `ppwt` + `\beta_13` `smoken`
+* The step-wise selection procedure iteratively adds and/or removes important predictor based on AIC score. 
+
+```{r stepwise_reg,collapse=TRUE}
+#library(olsrr)
+#fit = lm(bwt ~ ., data = baby_df)
+#ols_step_both_p(fit, pent = 0.15, prem = 0.15, details = T)
+
+
+library(MASS)             # for stepAIC()
+
+# Fit the full model 
+full_mod = lm(bwt ~ ., data = baby_df)
+
+# Stepwise regression model
+step_mod = stepAIC(full_mod, direction = "both", trace = TRUE)
+step_mod %>% broom::tidy()
+
+# Selected model 
+step_mod$call
+step_mod$anova
+```
+
+* Below is the plot of model residuals vs. fitted values. 
+
+```{r}
+fit = lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = baby_df)
+  
+baby_df %>% 
+  add_predictions(fit) %>% 
+  add_residuals(fit) %>% 
+  ggplot(aes(y = resid, x = pred), ) + 
+  geom_point(alpha = .2) + 
+  labs(
+    title = "Plot of model residuals vs. fitted values",
+    subtitle = "Stepwise model",
+    x = "Fitted Values",
+    y = "Residuals"
+  )
+
+```
+
+
+
+Compare your model to two others:
+
+One using length at birth and gestational age as predictors (main effects only)
+One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+
+
+Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
+
+Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don’t necessarily expect your model to be “optimal”.
