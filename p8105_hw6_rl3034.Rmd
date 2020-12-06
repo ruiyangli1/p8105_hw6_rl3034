@@ -116,9 +116,7 @@ Load and clean the data for regression analysis (i.e. convert numeric to factor 
 * There is no missing data observed. 
 
 ```{r baby_df,collapse=TRUE}
-# Inspect the data
-#read_csv("./data/birthweight.csv") %>% sample_n(3) 
-
+# load and clean data
 baby_df = 
   read_csv("./data/birthweight.csv") %>% 
   mutate(
@@ -128,27 +126,8 @@ baby_df =
     mrace = factor(mrace)
     )
 
-# counting missing values
-# total na count
-baby_df %>%
-  summarise(na_count = sum(is.na(.)))
-# variable-wise na%
-baby_df %>%
-  summarise_all(list(~sum(is.na(.))))/nrow(baby_df)
-
-# check to dummy variables
-
-#contrasts(baby_df$babysex)
-#levels(baby_df$babysex)
-
-#contrasts(baby_df$frace)
-#levels(baby_df$frace)
-
-#contrasts(baby_df$malform)
-#levels(baby_df$malform)
-
-#contrasts(baby_df$mrace)
-#levels(baby_df$mrace)
+# check missing values
+baby_df %>%  summarise(na_count = sum(is.na(.))) # total na's
 ```
 
 Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
@@ -158,30 +137,25 @@ Propose a regression model for birthweight. This model may be based on a hypothe
 * The step-wise selection procedure iteratively adds and/or removes important predictor based on AIC score. 
 
 ```{r stepwise_reg,collapse=TRUE}
-#library(olsrr)
-#fit = lm(bwt ~ ., data = baby_df)
-#ols_step_both_p(fit, pent = 0.15, prem = 0.15, details = T)
-
-
-library(MASS)             # for stepAIC()
-
-# Fit the full model 
+# fit the full model 
 full_mod = lm(bwt ~ ., data = baby_df)
 
-# Stepwise regression model
+# stepwise regression model
 step_mod = stepAIC(full_mod, direction = "both", trace = TRUE)
 step_mod %>% broom::tidy()
 
-# Selected model 
+# selected model 
 step_mod$call
 step_mod$anova
 ```
 
 * Below is the plot of model residuals vs. fitted values. 
 
-```{r}
+```{r plt_resid_vs_pred_step_mod}
+# fit selected model 
 fit = lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = baby_df)
   
+# plot resid vs. pred
 baby_df %>% 
   add_predictions(fit) %>% 
   add_residuals(fit) %>% 
@@ -193,7 +167,6 @@ baby_df %>%
     x = "Fitted Values",
     y = "Residuals"
   )
-
 ```
 
 
