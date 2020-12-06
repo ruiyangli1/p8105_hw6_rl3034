@@ -111,8 +111,9 @@ models_results_df %>%
 
 ## Problem 2
 
-Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
+Load and clean the data for regression analysis. 
 
+* Convert numeric *factor* variables back to factor. 
 * There is no missing data observed. 
 
 ```{r baby_df,collapse=TRUE}
@@ -127,21 +128,21 @@ baby_df =
     )
 
 # check missing values
-baby_df %>%  summarise(na_count = sum(is.na(.))) # total na's
+baby_df %>%  summarise(na_count = sum(is.na(.))) # total # of na's
 ```
 
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
+Propose a regression model for birthweight. 
 
 * We can use step-wise selection procedure to select our regression model. 
-* The model that I propose for birthweight is: `bwt` = `\beta_0` + `\beta_1` `babysex2` + `\beta_2` `bhead` + `\beta_3` `blength` + `\beta_4` `delwt` + `\beta_5` `fincome` + `\beta_6` `gaweeks` + `\beta_7` `mheight` + `\beta_8` `mrace2` + `\beta_9` `mrace3` + `\beta_10` `mrace4`  + `\beta_11` `parity` + `\beta_12` `ppwt` + `\beta_13` `smoken`
 * The step-wise selection procedure iteratively adds and/or removes important predictor based on AIC score. 
+* Based on the results from step-wise selection, my proposed model is: `bwt` = `\beta_0` + `\beta_1` `babysex2` + `\beta_2` `bhead` + `\beta_3` `blength` + `\beta_4` `delwt` + `\beta_5` `fincome` + `\beta_6` `gaweeks` + `\beta_7` `mheight` + `\beta_8` `mrace2` + `\beta_9` `mrace3` + `\beta_10` `mrace4`  + `\beta_11` `parity` + `\beta_12` `ppwt` + `\beta_13` `smoken`
 
 ```{r stepwise_reg,collapse=TRUE}
 # fit the full model 
 full_mod = lm(bwt ~ ., data = baby_df)
 
 # stepwise regression model
-step_mod = stepAIC(full_mod, direction = "both", trace = TRUE)
+step_mod = stepAIC(full_mod, direction = "both", trace = F)
 step_mod %>% broom::tidy()
 
 # selected model 
@@ -171,16 +172,16 @@ baby_df %>%
 ```
 
 
-Compare your model to two others:
+Compare the selected model to
+ 
+* Main effect model: using length at birth and gestational age as predictors
+* Interaction model: using head circumference, length, sex, and all interactions as predictors
 
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+Results: 
 
-
-Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
-
-Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don’t necessarily expect your model to be “optimal”.
-
+* From the violin plot below, we can see that our selected model performed the best among the three models as it has the lowest rmse. 
+* The interaction model performed the second best. 
+* The main effect model performed the worst among the three. 
 
 ```{r compare_models,collapse=TRUE}
 # get cv training and testing datasets
